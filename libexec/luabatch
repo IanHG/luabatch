@@ -1,0 +1,72 @@
+-- Load globally installed packages
+--local argparse = assert(require "argparse")
+
+-- Load local packages
+local exception  = assert(require "lib.exception")
+local version    = assert(require "lib.version")
+local path       = assert(require "lib.path")
+local argparse   = assert(require "lib.argparse")
+local util       = assert(require "lib.util")
+local logging    = assert(require "lib.logging")
+local logger     = logging.logger
+local filesystem = assert(require "lib.filesystem")
+local batches    = assert(require "lib.batches")
+
+-- Description of this script
+local description = version.get_description("luabatch")
+
+-- Load template
+local function load_template(ttype, name)
+   local f = io.open(path.join(global_config.template_path, path.join(ttype, name .. ".lua")))
+   
+   if f == nil then
+      logger:alert("Did not find template file '" .. name .. "' while searchin '" .. global_config.template_path .. "'.")
+      assert(false)
+   end
+   
+   local template = f:read("*all")
+   return template
+end
+
+local function command(args)
+   local bt = batches.load_batches(args.name)
+   bt:print()
+end
+
+--- Main driver.
+function main()
+   -- Arg parser
+   local parser = argparse.create(description)
+   parser:argument("name")
+   
+   -- Parse arguments
+   args = parser:parse()
+
+   if not args.quiet then
+      logger:add_log("stdout", io.stdout)
+   end
+
+   logger.format = args.format
+   
+   if args.debug then
+      logger:debug("Lua version : " .. _VERSION)
+      logger:debug(util.print(args, "args")    )
+   end
+   
+   exception.try(function()
+      command(args)
+   end, function(e)
+      -- Print exception
+      exception.message(e)
+         
+      -- Print usage
+      print("\n" .. parser:get_usage())
+
+      -- Exit with non zero status
+      os.exit(1)
+   end)
+end
+
+--[[
+# vi:syntax=lua
+--]]
