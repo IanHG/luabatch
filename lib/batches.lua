@@ -6,6 +6,7 @@ local util    = assert(require "lib.util")
 local path    = assert(require "lib.path")
 local logging = assert(require "lib.logging")
 local logger  = logging.logger
+local execcmd = assert(require "lib.execcmd")
 
 local function pack(...)
    return { ... }
@@ -96,26 +97,26 @@ end
 -- Implemenents some general function for creating the
 -- setter functions to be passed to the extern package.
 --
-local batches_creator_class = class.create_class()
+local creator_class = class.create_class()
 
-function batches_creator_class:__init()
+function creator_class:__init()
 end
 
-function batches_creator_class:true_setter(var)
+function creator_class:true_setter(var)
    return function()
       self[var] = true
       return self.ftable
    end
 end
 
-function batches_creator_class:false_setter(var)
+function creator_class:false_setter(var)
    return function()
       self[var] = false
       return self.ftable
    end
 end
 
-function batches_creator_class:string_setter(...)
+function creator_class:string_setter(...)
    local t_outer = pack( ... )
    return function(...)
       local t_inner = pack( ... )
@@ -136,7 +137,7 @@ function batches_creator_class:string_setter(...)
    end
 end
 
-function batches_creator_class:element_setter(var, num)
+function creator_class:element_setter(var, num)
    assert(type(var) == "string")
 
    return function(...)
@@ -150,7 +151,7 @@ function batches_creator_class:element_setter(var, num)
    end
 end
 
-function batches_creator_class:print_setter()
+function creator_class:print_setter()
    return function(...)
       local t_inner = pack( ... )
 
@@ -164,7 +165,7 @@ end
 
 
 ---
-local batch_class = class.create_class(batches_creator_class)
+local batch_class = class.create_class(creator_class)
 
 function batch_class:__init()
    
@@ -173,6 +174,8 @@ function batch_class:__init()
 
    self.ftable = {
       symbol_add = self:add_setter(),
+
+      pop        = nil
    }
 end
 
@@ -187,15 +190,139 @@ function batch_class:print()
    self.symbol_table:print()
 end
 
+local command_class = class.create_class()
+
+function command_class:__init()
+   -- command types:
+   --    "exec"  : execute in shell
+   --    "files" : create template files
+   --    "mkdir" : create directory
+   --    "chdir" : change working directory
+   self.type    = "nil"
+   self.command = ""
+end
+
+
+function command_class:execute(batch, program)
+   logger:message(" Executing command : [" .. self.type .. "] : '" .. batch.symbol_table:substitute(self.command) .. "'.")
+
+   -- Load template
+   local function load_template(path)
+      local f = io.open(path)
+      
+      if f == nil then
+         logger:alert("Did not find template file '" .. path .. "'.")
+         assert(false)
+      end
+      
+      local template = f:read("*all")
+      return template
+   end
+
+   if self.type == "exec" then
+      execcmd.execcmd_bashexec(batch.symbol_table:substitute(self.command), logger.logs)
+   elseif self.type == "files" then
+      for k, v in pairs(program.templates) do
+         local template = batch.symbol_table:substitute(load_template(v[3]))
+         local path     = v[3]:gsub(".template", "")
+
+         local template_file = assert(io.open(path, "w"))
+         template_file:write(template)
+         template_file:close()
+      end
+   elseif self.type == "mkdir" then
+      filesystem.mkdir(batch.symbol_table:substitute(self.command))
+   elseif self.type == "chdir" then
+      local status = filesystem.chdir(batch.symbol_table:substitute(self.command))
+      print(status)
+   end
+end
+
+function command_class:print()
+   logger:message("      Command : [" .. self.type .. "] '" .. self.command .. "'.")
+end
+
 ---
 --
 --
-local batches_class = class.create_class(batches_creator_class)
+local program_class = class.create_class(creator_class)
+
+function program_class:__init()
+   self.name      = ""
+
+   self.templates = {}
+
+   self.commands  = {}
+
+   self.ftable = {
+      template       = self:element_setter("templates", 3),
+      command        = self:command_setter(),
+      files          = self:files_setter(),
+      with_directory = self:with_directory_setter(),
+
+      pop = nil,
+   }
+end
+
+function program_class:command_setter()
+   return function(cmd)
+      local command = command_class:create()
+      command.type    = "exec"
+      command.command = cmd
+      table.insert(self.commands, command)
+      return self.ftable
+   end
+end
+
+function program_class:files_setter()
+   return function()
+      local command = command_class:create()
+      command.type = "files"
+      table.insert(self.commands, command)
+      return self.ftable
+   end
+end
+
+function program_class:with_directory_setter()
+   return function(dir)
+      local command_mkdir = command_class:create()
+      command_mkdir.type    = "mkdir"
+      command_mkdir.command = dir
+      table.insert(self.commands, command_mkdir)
+      
+      local command_chdir = command_class:create()
+      command_chdir.type    = "chdir"
+      command_chdir.command = dir
+      table.insert(self.commands, command_chdir)
+
+      return self.ftable
+   end
+end
+
+function program_class:execute(batches, batch)
+   for k, v in pairs(self.commands) do
+      v:execute(batch, self)
+   end
+end
+
+function program_class:print()
+   logger:message(" Program :")
+   for k, v in pairs(self.templates) do
+      logger:message("   Template : " .. v[1] .. " " .. v[2] .. " " .. v[3])
+   end
+   for k, v in pairs(self.commands) do
+      v:print()
+   end
+end
+
+---
+--
+--
+local batches_class = class.create_class(creator_class)
 
 function batches_class:__init()
    -- Util
    self.log_format = "newline"
-   self.path       = ""
 
    -- General stuff
    self.directory = ""
@@ -204,13 +331,15 @@ function batches_class:__init()
    -- 
    self.symbol_table = symbol_table_class:create()
    
-   -- Lmod 
-   self.batches = { }
+   -- 
+   self.batches  = { }
+   self.programs = { }
    
    -- Function table for loading package
    self.ftable = {
       --
       batch     = self:batches_setter(),
+      program   = self:program_setter(),
       template  = self:element_setter("templates", 3),
       directory = self:string_setter ("directory"),
 
@@ -229,8 +358,33 @@ function batches_class:batches_setter()
       for k, v in pairs(b) do
          batch.symbol_table:add_symbol(k, v)
       end
+      batch.ftable.pop = self.ftable
       table.insert(self.batches, batch)
       return batch.ftable
+   end
+end
+
+function batches_class:program_setter()
+   return function(p)
+      if type(p) ~= "string" then
+         assert(false)
+      end
+
+      local program = program_class:create()
+      program.name       = p
+      program.ftable.pop = self.ftable
+
+      table.insert(self.programs, program)
+      return program.ftable
+   end
+end
+
+function batches_class:execute()
+   for kp, vp in pairs(self.programs) do
+      for kb, vb in pairs(self.batches) do
+         vp:execute(self, vb)
+         filesystem.chdir(self.directory)
+      end
    end
 end
 
@@ -246,6 +400,10 @@ function batches_class:load(batches_path)
       env[self.name]()
    else
       logger:alert("Could not load.")
+   end
+
+   if util.isempty(self.directory) then
+      self.directory = filesystem.cwd()
    end
    
    --for k, v in pairs(self) do
@@ -272,6 +430,10 @@ function batches_class:print()
    self.symbol_table:print()
 
    for k, v in pairs(self.batches) do
+      v:print()
+   end
+   
+   for k, v in pairs(self.programs) do
       v:print()
    end
 end

@@ -15,22 +15,12 @@ local batches    = assert(require "lib.batches")
 -- Description of this script
 local description = version.get_description("luabatch")
 
--- Load template
-local function load_template(ttype, name)
-   local f = io.open(path.join(global_config.template_path, path.join(ttype, name .. ".lua")))
-   
-   if f == nil then
-      logger:alert("Did not find template file '" .. name .. "' while searchin '" .. global_config.template_path .. "'.")
-      assert(false)
-   end
-   
-   local template = f:read("*all")
-   return template
-end
 
 local function command(args)
    local bt = batches.load_batches(args.name)
    bt:print()
+
+   bt:execute()
 end
 
 --- Main driver.
