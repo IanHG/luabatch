@@ -30,6 +30,24 @@ local function get_name(batches_path)
    return f:gsub("." .. e, "")
 end
 
+math.randomseed(os.clock()+os.time())
+
+local function generate_uid(template)
+   if util.isempty(template) then
+      template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+   end
+
+   local random = math.random
+   local function uuid()
+      return string.gsub(template, '[xy]', function (c)
+         local v = (c == 'x') and random(0, 0xf) or random(8, 0xb)
+         return string.format('%x', v)
+      end)
+   end
+
+   return uuid()
+end
+
 --- Class to implement a simple symbol table,
 -- which can be used for string substitution.
 --
@@ -520,6 +538,12 @@ function batches_class:load(batches_path)
 
    if util.isempty(self.directory) then
       self.directory = filesystem.cwd()
+   end
+   
+   self.symbol_table:add_symbol("uid", generate_uid("xxxx"))
+
+   for kbatch, vbatch in pairs(self.batches) do
+      vbatch.symbol_table:merge(self.symbol_table)
    end
    
    --for k, v in pairs(self) do
