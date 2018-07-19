@@ -17,7 +17,8 @@ local description = version.get_description("luabatch")
 
 
 local function command(args)
-   local bt = batches.load_batches(args.name)
+   local bt = batches.load_batches(args.name, args.symbol)
+   
    bt:print()
 
    bt:execute()
@@ -27,6 +28,7 @@ end
 function main()
    -- Arg parser
    local parser = argparse.create(description)
+   parser:option("-s --symbol"  , "Add symbol to be substituted."):count("*")
    parser:argument("name")
    
    -- Parse arguments

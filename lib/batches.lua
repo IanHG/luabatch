@@ -522,7 +522,6 @@ end
 
 function batches_class:execute()
    logger:message("Executing bathes.")
-   print("WHAT")
    for kp, vp in pairs(self.programs) do
       for kb, vb in pairs(self.batches) do
          self.path_handler:pop_all()
@@ -532,7 +531,7 @@ function batches_class:execute()
    end
 end
 
-function batches_class:load(batches_path)
+function batches_class:load(batches_path, symbols)
    assert(type(batches_path) == "string")
    self.path = batches_path
    self.name = "config"
@@ -553,6 +552,12 @@ function batches_class:load(batches_path)
    end
    
    self.symbol_table:add_symbol("uid", generate_uid("xxxx"))
+   if symbols ~= nil then
+      for k, v in pairs(symbols) do
+         local s = util.split(v, "=")
+         self.symbol_table:add_symbol(s[1], s[2])
+      end
+   end
 
    for kbatch, vbatch in pairs(self.batches) do
       vbatch.symbol_table:merge(self.symbol_table)
