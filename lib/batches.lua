@@ -93,6 +93,60 @@ function symbol_table_class:print()
    end
 end
 
+---
+local path_handler_class = class.create_class()
+
+function path_handler_class:__init()
+   self.paths = {}
+end
+
+function path_handler_class:push(ppath)
+   logger:message(" Pushing path : '" .. ppath .. "'.")
+   
+   if path.is_abs_path(ppath) then
+      table.insert(self.paths, ppath)
+   else
+      table.insert(self.paths, path.join(self:current(), ppath))
+   end
+
+   local status = filesystem.chdir(self.paths[#self.paths])
+   if status == nil then
+      assert(false)
+   end
+end
+
+function path_handler_class:pop()
+   if #self.paths > 0 then
+      logger:message(" Popping path : '" .. self.paths[#self.paths] .. "'.")
+      self.paths[#self.paths] = nil
+      if #self.paths > 0 then
+         local status = filesystem.chdir(self.paths[#self.paths])
+         if status == nil then
+            assert(false)
+         end
+      end
+   else
+      logger:message(" Popping nothing.")
+   end
+
+   return #self.paths
+end
+
+function path_handler_class:pop_all()
+   while (self:pop() > 0) do
+   end
+end
+
+function path_handler_class:current()
+   return self.paths[#self.paths]
+end
+
+function path_handler_class:print()
+   for k, v in pairs(self.paths) do
+      logger:message(" Path Handler : " .. v)
+   end
+end
+
 --- Base class for the different batches classes.
 -- Implemenents some general function for creating the
 -- setter functions to be passed to the extern package.
@@ -198,8 +252,9 @@ function command_class:__init()
    --    "files" : create template files
    --    "mkdir" : create directory
    --    "chdir" : change working directory
-   self.type    = "nil"
-   self.command = ""
+   self.type         = "nil"
+   self.command      = ""
+   self.path_handler = nil
 end
 
 
@@ -223,18 +278,26 @@ function command_class:execute(batch, program)
       execcmd.execcmd_bashexec(batch.symbol_table:substitute(self.command), logger.logs)
    elseif self.type == "files" then
       for k, v in pairs(program.templates) do
-         local template = batch.symbol_table:substitute(load_template(v[3]))
-         local path     = v[3]:gsub(".template", "")
+         if v.ttype == "inline" then
+            -- not implemented
+            print("inlint not implemented")
+            assert(false)
+         elseif v.ttype == "file" then
+            local template = batch.symbol_table:substitute(load_template(v.path))
+            local _, f,_   = path.split_filename(v.path)
+            local path     = path.join(self.path_handler:current(), f:gsub(".template", ""))
 
-         local template_file = assert(io.open(path, "w"))
-         template_file:write(template)
-         template_file:close()
+            local template_file = assert(io.open(path, "w"))
+            template_file:write(template)
+            template_file:close()
+         else
+            assert(false)
+         end
       end
    elseif self.type == "mkdir" then
       filesystem.mkdir(batch.symbol_table:substitute(self.command))
    elseif self.type == "chdir" then
-      local status = filesystem.chdir(batch.symbol_table:substitute(self.command))
-      print(status)
+      self.path_handler:push(batch.symbol_table:substitute(self.command))
    end
 end
 
@@ -254,8 +317,10 @@ function program_class:__init()
 
    self.commands  = {}
 
+   self.path_handler = nil
+
    self.ftable = {
-      template       = self:element_setter("templates", 3),
+      template       = self:template_setter(),
       command        = self:command_setter(),
       files          = self:files_setter(),
       with_directory = self:with_directory_setter(),
@@ -264,9 +329,37 @@ function program_class:__init()
    }
 end
 
+function program_class:create_command()
+   local  command = command_class:create()
+   command.path_handler = self.path_handler
+   return command
+end
+
+function program_class:template_setter()
+   -- content can be content or path depending on ttype
+   return function(ttype, content)
+      if ttype == "inline" then
+         table.insert(self.templates, { ttype = ttype, content = content, path = nil } )
+      elseif ttype == "file" then
+         local tpath = ""
+         if path.is_abs_path(content) then
+            tpath = content
+         else
+            self.path_handler:print()
+            tpath = path.join(self.path_handler:current(), content)
+         end
+         table.insert(self.templates, { ttype = ttype, content = nil, path = tpath } )
+      else
+         logger:alert("Unknwown template type '" .. ttype .. "'.")
+         assert(false)
+      end
+      return self.ftable
+   end
+end
+
 function program_class:command_setter()
    return function(cmd)
-      local command = command_class:create()
+      local command   = self:create_command() 
       command.type    = "exec"
       command.command = cmd
       table.insert(self.commands, command)
@@ -276,8 +369,8 @@ end
 
 function program_class:files_setter()
    return function()
-      local command = command_class:create()
-      command.type = "files"
+      local command = self:create_command()
+      command.type  = "files"
       table.insert(self.commands, command)
       return self.ftable
    end
@@ -285,12 +378,12 @@ end
 
 function program_class:with_directory_setter()
    return function(dir)
-      local command_mkdir = command_class:create()
+      local command_mkdir   = self:create_command()
       command_mkdir.type    = "mkdir"
       command_mkdir.command = dir
       table.insert(self.commands, command_mkdir)
       
-      local command_chdir = command_class:create()
+      local command_chdir   = self:create_command()
       command_chdir.type    = "chdir"
       command_chdir.command = dir
       table.insert(self.commands, command_chdir)
@@ -308,7 +401,7 @@ end
 function program_class:print()
    logger:message(" Program :")
    for k, v in pairs(self.templates) do
-      logger:message("   Template : " .. v[1] .. " " .. v[2] .. " " .. v[3])
+      logger:message("   Template : " .. v.ttype .. " " .. v.path)
    end
    for k, v in pairs(self.commands) do
       v:print()
@@ -330,6 +423,7 @@ function batches_class:__init()
    
    -- 
    self.symbol_table = symbol_table_class:create()
+   self.path_handler = path_handler_class:create()
    
    -- 
    self.batches  = { }
@@ -371,8 +465,9 @@ function batches_class:program_setter()
       end
 
       local program = program_class:create()
-      program.name       = p
-      program.ftable.pop = self.ftable
+      program.name         = p
+      program.path_handler = self.path_handler
+      program.ftable.pop   = self.ftable
 
       table.insert(self.programs, program)
       return program.ftable
@@ -380,10 +475,13 @@ function batches_class:program_setter()
 end
 
 function batches_class:execute()
+   logger:message("Executing bathes.")
+   print("WHAT")
    for kp, vp in pairs(self.programs) do
       for kb, vb in pairs(self.batches) do
+         self.path_handler:pop_all()
+         self.path_handler:push(self.directory)
          vp:execute(self, vb)
-         filesystem.chdir(self.directory)
       end
    end
 end
@@ -392,6 +490,8 @@ function batches_class:load(batches_path)
    assert(type(batches_path) == "string")
    self.path = batches_path
    self.name = "config"
+   self.path_handler:pop_all()
+   self.path_handler:push(filesystem.cwd())
    
    local env  = self.ftable
    local file = dofile_into_environment(self.path, env)
