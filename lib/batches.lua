@@ -45,7 +45,7 @@ function symbol_table_class:__init()
    }
 end
 
-function symbol_table_class:add_symbol(symb, ssymb)
+function symbol_table_class:add_symbol(symb, ssymb, overwrite)
    if not (type(symb) == "string") or util.isempty(symb) then
       assert(false)
    end
@@ -54,8 +54,19 @@ function symbol_table_class:add_symbol(symb, ssymb)
    end
 
    local symbol = self.sbeg .. symb .. self.send
-   if not self.symbols[symbol] then
+   if (not self.symbols[symbol]) or overwrite then
       self.symbols[self.sbeg .. symb .. self.send] = ssymb
+   end
+end
+
+function symbol_table_class:remove_symbol(symb)
+   if not (type(symb) == "string") or util.isempty(symb) then
+      assert(false)
+   end
+   
+   local symbol = self.sbeg .. symb .. self.send
+   if self.symbols[symbol] then
+      self.symbols[symbol] = nil
    end
 end
 
@@ -98,6 +109,8 @@ local path_handler_class = class.create_class()
 
 function path_handler_class:__init()
    self.paths = {}
+
+   self.symbol_table = symbol_table_class:create()
 end
 
 function path_handler_class:push(ppath)
@@ -108,6 +121,8 @@ function path_handler_class:push(ppath)
    else
       table.insert(self.paths, path.join(self:current(), ppath))
    end
+
+   self.symbol_table:add_symbol("cwd", self.paths[#self.paths], true)
 
    local status = filesystem.chdir(self.paths[#self.paths])
    if status == nil then
@@ -120,6 +135,7 @@ function path_handler_class:pop()
       logger:message(" Popping path : '" .. self.paths[#self.paths] .. "'.")
       self.paths[#self.paths] = nil
       if #self.paths > 0 then
+         self.symbol_table:add_symbol("cwd", self.paths[#self.paths], true)
          local status = filesystem.chdir(self.paths[#self.paths])
          if status == nil then
             assert(false)
@@ -283,7 +299,7 @@ function command_class:execute(batch, program)
             print("inlint not implemented")
             assert(false)
          elseif v.ttype == "file" then
-            local template = batch.symbol_table:substitute(load_template(v.path))
+            local template = self.path_handler.symbol_table:substitute(batch.symbol_table:substitute(load_template(v.path)))
             local _, f,_   = path.split_filename(v.path)
             local path     = path.join(self.path_handler:current(), f:gsub(".template", ""))
 
