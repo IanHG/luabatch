@@ -332,6 +332,8 @@ function command_class:execute(batch, program)
       filesystem.mkdir(batch.symbol_table:substitute(self.command))
    elseif self.type == "chdir" then
       self.path_handler:push(batch.symbol_table:substitute(self.command))
+   elseif self.type == "popdir" then
+      self.path_handler:pop()
    end
 end
 
@@ -358,6 +360,7 @@ function program_class:__init()
       command        = self:command_setter(),
       files          = self:files_setter(),
       with_directory = self:with_directory_setter(),
+      pop_directory  = self:pop_directory_setter(),
 
       pop = nil,
    }
@@ -422,6 +425,15 @@ function program_class:with_directory_setter()
       command_chdir.command = dir
       table.insert(self.commands, command_chdir)
 
+      return self.ftable
+   end
+end
+
+function program_class:pop_directory_setter()
+   return function()
+      local command = self:create_command()
+      command.type = "popdir"
+      table.insert(self.commands, command)
       return self.ftable
    end
 end
