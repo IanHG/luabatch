@@ -17,6 +17,11 @@ local description = version.get_description("luabatch")
 
 
 local function command(args)
+   for k, v in pairs(args.symbol) do
+      print(k)
+      print(v)
+   end
+
    local bt = batches.load_batches(args.name, args.symbol)
    
    bt:print()

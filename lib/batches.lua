@@ -665,9 +665,6 @@ function batches_class:execute()
          local p     = pack( ... )
          local batch = batch_class:create()
          for k, v in pairs(p) do
-            --print(k)
-            --print(v.key)
-            --print(v.value)
             batch.symbol_table:add_symbol(v.key, v.value)
          end
          batch.symbol_table:merge(vp.symbol_table)
@@ -753,9 +750,9 @@ function batches_class:print()
    end
 end
 
-local function load_batches(path)
+local function load_batches(path, symbols)
    local bt = batches_class:create()
-   bt:load(path)
+   bt:load(path, symbols)
    return bt
 end
 
