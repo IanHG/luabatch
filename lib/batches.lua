@@ -593,6 +593,14 @@ function batches_class:variable_setter()
    return function(name, variables, format_fcn)
       if self.variables[name] ~= nil then
          self.variables[name]:append(variables)
+         if type(format_fcn) == "function" then
+            if not self.variables[name].format_fcn then
+               self.variables[name].format_fcn = format_fcn
+            else
+               logger:alert("Format function for variable '" .. name .. "' already set!")
+               assert(false)
+            end
+         end
       else
          self.variables[name] = variable_class:create()
          self.variables[name].name       = name
