@@ -215,7 +215,6 @@ function deepcompare(t1,t2,ignore_mt)
 end
 
 
-
 -- Load module functions
 M.print = table_print
 M.merge = merge
@@ -226,5 +225,6 @@ M.ordered = ordered
 M.conditional = conditional
 M.deepcompare = deepcompare
 M.isempty = isempty
+M.map_all = map_all
 
 return M

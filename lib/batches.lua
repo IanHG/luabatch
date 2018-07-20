@@ -63,7 +63,7 @@ function symbol_table_class:__init()
    }
 end
 
-function symbol_table_class:add_symbol(symb, ssymb, overwrite)
+function symbol_table_class:add_symbol(symb, ssymb, overwrite, format_fcn)
    if not (type(symb) == "string") or util.isempty(symb) then
       assert(false)
    end
@@ -73,7 +73,7 @@ function symbol_table_class:add_symbol(symb, ssymb, overwrite)
 
    local symbol = self.sbeg .. symb .. self.send
    if (not self.symbols[symbol]) or overwrite then
-      self.symbols[self.sbeg .. symb .. self.send] = ssymb
+      self.symbols[self.sbeg .. symb .. self.send] = { ssymb = ssymb, format_fcn = format_fcn }
    end
 end
 
@@ -89,21 +89,59 @@ function symbol_table_class:remove_symbol(symb)
 end
 
 function symbol_table_class:add_symbol_setter()
-   return function(symb, ssymb)
-      self:add_symbol(symb, ssymb)
+   return function(symb, ssymb, overwrite, format_fcn)
+      self:add_symbol(symb, ssymb, overwrite, format_fcn)
       return self.ftable
    end
 end
 
-function symbol_table_class:substitute(str)
-   local function escape(k)
-      return k:gsub("%%", "%%%%")
-   end
+function symbol_table_class:escape(k)
+   local  pattern, _ = k:gsub("%%", "%%%%")
+   return pattern
+end
 
-   for k, v in pairs(self.symbols) do
-      str = string.gsub(str, escape(k), v)
+function symbol_table_class:substitute(str)
+   local pattern = self:escape(self.sbeg .. ".+" .. self.send)
+   
+   -- Declare implementation function
+   local function substitute_impl(str)
+      if str:match(pattern) then
+         local format_fcns  = { }
+         local recurse      = false
+         
+         -- loop over symbols
+         for k, v in pairs(self.symbols) do
+            if str:match(self:escape(k)) then
+               local formatet_ssymb = self:escape(v.ssymb)
+               str     = string.gsub(str, self:escape(k), formatet_ssymb)
+               if v.ssymb:match(pattern) then
+                  recurse = true
+               end
+               
+               if v.format_fcn then
+                  table.insert(format_fcns, v.format_fcn)
+               end
+            end
+         end
+         
+         -- if we substituted in any new symbols, we need to do recursion!
+         if recurse then
+            str = substitute_impl(str)
+         end
+         
+         -- after all substitutions, we call any formating functions 
+         for k, v in pairs(format_fcns) do
+            str = v(str)
+         end
+      end
+      
+
+      return str
    end
    
+   -- Call substitution implementation
+   str = substitute_impl(str)
+
    return str
 end
 
@@ -115,10 +153,19 @@ function symbol_table_class:merge(st)
    end
 end
 
+function symbol_table_class:check(str)
+   -- Check for any missing substitutions
+   local pattern = self:escape(self.sbeg .. ".+" .. self.send)
+   if str:match(pattern) then
+      logger:alert(" String '" .. str .. "' contains un-substitued symbols!")
+      assert(false)
+   end
+end
+
 function symbol_table_class:print()
    logger:message("   Symbol table : ")
    for k, v in pairs(self.symbols) do
-      logger:message("      " .. k .. " : " .. v)
+      logger:message("      " .. k .. " : " .. v.ssymb)
    end
 end
 
@@ -251,8 +298,38 @@ function creator_class:print_setter()
    end
 end
 
+---
+--
+--
+local variable_class = class.create_class()
+
+function variable_class:__init()
+   self.name      = ""
+   self.variables = {}
+end
+
+function variable_class:append(variables)
+   if type(variables) == "string" then
+      table.insert(self.variables, variables)
+   elseif type(variables) == "table" then
+      for k, v in pairs(variables) do
+         table.insert(self.variables, v)
+      end
+   else
+      assert(false)
+   end
+end
+
+function variable_class:print()
+   logger:message(" Variable : " .. self.name)
+   for k, v in pairs(self.variables) do
+      logger:message("   " .. v)
+   end
+end
 
 ---
+--
+--
 local batch_class = class.create_class(creator_class)
 
 function batch_class:__init()
@@ -282,10 +359,11 @@ local command_class = class.create_class()
 
 function command_class:__init()
    -- command types:
-   --    "exec"  : execute in shell
-   --    "files" : create template files
-   --    "mkdir" : create directory
-   --    "chdir" : change working directory
+   --    "exec"   : execute in shell
+   --    "files"  : create template files
+   --    "mkdir"  : create directory
+   --    "chdir"  : change working directory
+   --    "popdir" : pop current directory
    self.type         = "nil"
    self.command      = ""
    self.path_handler = nil
@@ -350,10 +428,12 @@ function program_class:__init()
    self.name      = ""
 
    self.templates = {}
+   self.variables = nil
 
    self.commands  = {}
 
    self.path_handler = nil
+   self.symbol_table = symbol_table_class:create()
 
    self.ftable = {
       template       = self:template_setter(),
@@ -361,6 +441,7 @@ function program_class:__init()
       files          = self:files_setter(),
       with_directory = self:with_directory_setter(),
       pop_directory  = self:pop_directory_setter(),
+      define         = self:define_setter(),
 
       pop = nil,
    }
@@ -438,6 +519,13 @@ function program_class:pop_directory_setter()
    end
 end
 
+function program_class:define_setter()
+   return function(symb, ssymb, format_fcn)
+      self.symbol_table:add_symbol(symb, ssymb, true, format_fcn)
+      return self.ftable
+   end
+end
+
 function program_class:execute(batches, batch)
    for k, v in pairs(self.commands) do
       v:execute(batch, self)
@@ -448,6 +536,11 @@ function program_class:print()
    logger:message(" Program :")
    for k, v in pairs(self.templates) do
       logger:message("   Template : " .. v.ttype .. " " .. v.path)
+   end
+   if self.variables then
+      for k, v in pairs(self.variables) do
+         logger:message("   Variable : " .. v)
+      end
    end
    for k, v in pairs(self.commands) do
       v:print()
@@ -464,6 +557,7 @@ function batches_class:__init()
    self.log_format = "newline"
 
    -- General stuff
+   self.variables = { }
    self.directory = ""
    self.templates = { }
    
@@ -472,13 +566,14 @@ function batches_class:__init()
    self.path_handler = path_handler_class:create()
    
    -- 
-   self.batches  = { }
+   --self.batches  = { }
    self.programs = { }
    
    -- Function table for loading package
    self.ftable = {
       --
-      batch     = self:batches_setter(),
+      variable  = self:variable_setter(),
+      --batch     = self:batches_setter(),
       program   = self:program_setter(),
       template  = self:element_setter("templates", 3),
       directory = self:string_setter ("directory"),
@@ -490,6 +585,19 @@ function batches_class:__init()
       --
       symbol = self.symbol_table.ftable,
    }
+end
+
+function batches_class:variable_setter()
+   return function(name, variables)
+      if self.variables[name] ~= nil then
+         self.variables[name]:append(variables)
+      else
+         self.variables[name] = variable_class:create()
+         self.variables[name].name = name
+         self.variables[name]:append(variables)
+      end
+      return self.ftable
+   end
 end
 
 function batches_class:batches_setter()
@@ -505,7 +613,7 @@ function batches_class:batches_setter()
 end
 
 function batches_class:program_setter()
-   return function(p)
+   return function(p, variables)
       if type(p) ~= "string" then
          assert(false)
       end
@@ -514,19 +622,69 @@ function batches_class:program_setter()
       program.name         = p
       program.path_handler = self.path_handler
       program.ftable.pop   = self.ftable
+      
+      if type(variables) == "string" then
+         program.variables = { variables }
+      elseif type(variables) == "table" then
+         program.variables = variables
+      end
 
       table.insert(self.programs, program)
       return program.ftable
    end
 end
 
+---
+
+function batches_class:map_all(fcn, tab, tabs)
+   local function map_all_impl(fcn, tab, tabs, idx, ...) 
+       if idx < 1 then
+           fcn(...)
+       else
+           local t = tab[tabs[idx]]
+           for k, v in pairs(t.variables) do
+              map_all_impl(fcn, tab, tabs, idx - 1, { key = t.name, value = v }, ...) 
+           end
+       end
+   end
+
+   if tabs == nil then
+      tabs = {}
+      for k, v in pairs(tab) do
+         table.insert(tabs, k)
+      end
+   end
+
+   map_all_impl(fcn, tab, tabs, #tabs)
+end
+
 function batches_class:execute()
-   logger:message("Executing bathes.")
+   logger:message("Executing batches.")
    for kp, vp in pairs(self.programs) do
-      for kb, vb in pairs(self.batches) do
+      local function run_batch(...)
+         local p     = pack( ... )
+         local batch = batch_class:create()
+         for k, v in pairs(p) do
+            --print(k)
+            --print(v.key)
+            --print(v.value)
+            batch.symbol_table:add_symbol(v.key, v.value)
+         end
+         batch.symbol_table:merge(vp.symbol_table)
+         batch.symbol_table:merge(self.symbol_table)
+         
+         logger:message("Running batch ")
+         batch:print()
+         
          self.path_handler:pop_all()
          self.path_handler:push(self.directory)
-         vp:execute(self, vb)
+         vp:execute(self, batch)
+      end
+
+      if vp.variables == nil then
+         self:map_all(run_batch, self.variables)
+      else
+         self:map_all(run_batch, self.variables, vp.variables)
       end
    end
 end
@@ -559,9 +717,9 @@ function batches_class:load(batches_path, symbols)
       end
    end
 
-   for kbatch, vbatch in pairs(self.batches) do
-      vbatch.symbol_table:merge(self.symbol_table)
-   end
+   --for kbatch, vbatch in pairs(self.batches) do
+   --   vbatch.symbol_table:merge(self.symbol_table)
+   --end
    
    --for k, v in pairs(self) do
    --   if type(v) == "string" then
@@ -586,7 +744,7 @@ function batches_class:print()
 
    self.symbol_table:print()
 
-   for k, v in pairs(self.batches) do
+   for k, v in pairs(self.variables) do
       v:print()
    end
    
