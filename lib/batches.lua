@@ -304,8 +304,9 @@ end
 local variable_class = class.create_class()
 
 function variable_class:__init()
-   self.name      = ""
-   self.variables = {}
+   self.name       = ""
+   self.variables  = {}
+   self.format_fcn = nil
 end
 
 function variable_class:append(variables)
@@ -589,12 +590,15 @@ function batches_class:__init()
 end
 
 function batches_class:variable_setter()
-   return function(name, variables)
+   return function(name, variables, format_fcn)
       if self.variables[name] ~= nil then
          self.variables[name]:append(variables)
       else
          self.variables[name] = variable_class:create()
-         self.variables[name].name = name
+         self.variables[name].name       = name
+         if type(format_fcn) == "function" then
+            self.variables[name].format_fcn = format_fcn
+         end
          self.variables[name]:append(variables)
       end
       return self.ftable
@@ -651,7 +655,7 @@ function batches_class:map_all(fcn, tab, tabs)
        else
            local t = tab[tabs[idx]]
            for k, v in pairs(t.variables) do
-              map_all_impl(fcn, tab, tabs, idx - 1, { key = t.name, value = v }, ...) 
+              map_all_impl(fcn, tab, tabs, idx - 1, { key = t.name, value = v, format_fcn = t.format_fcn }, ...) 
            end
        end
    end
@@ -673,7 +677,7 @@ function batches_class:execute()
          local p     = pack( ... )
          local batch = batch_class:create()
          for k, v in pairs(p) do
-            batch.symbol_table:add_symbol(v.key, v.value)
+            batch.symbol_table:add_symbol(v.key, v.value, true, v.format_fcn)
          end
          batch.symbol_table:merge(vp.symbol_table)
          batch.symbol_table:merge(self.symbol_table)
