@@ -577,6 +577,7 @@ function batches_class:__init()
       program   = self:program_setter(),
       template  = self:element_setter("templates", 3),
       directory = self:string_setter ("directory"),
+      define    = self:define_setter(),
 
       -- util
       print    = print,
@@ -631,6 +632,13 @@ function batches_class:program_setter()
 
       table.insert(self.programs, program)
       return program.ftable
+   end
+end
+
+function batches_class:define_setter()
+   return function(symb, ssymb, format_fcn)
+      self.symbol_table:add_symbol(symb, ssymb, true, format_fcn)
+      return self.ftable
    end
 end
 
@@ -710,25 +718,9 @@ function batches_class:load(batches_path, symbols)
    if symbols ~= nil then
       for k, v in pairs(symbols) do
          local s = util.split(v, "=")
-         self.symbol_table:add_symbol(s[1], s[2])
+         self.symbol_table:add_symbol(s[1], s[2], true)
       end
    end
-
-   --for kbatch, vbatch in pairs(self.batches) do
-   --   vbatch.symbol_table:merge(self.symbol_table)
-   --end
-   
-   --for k, v in pairs(self) do
-   --   if type(v) == "string" then
-   --      self[k] = self.symbol_table:substitute(v)
-   --   end
-   --end
-
-   --for k, v in pairs(self.lmod) do
-   --   if type(v) == "string" then
-   --      self.lmod[k] = self.symbol_table:substitute(v)
-   --   end
-   --end
 end
 
 --
