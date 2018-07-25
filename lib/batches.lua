@@ -396,11 +396,20 @@ function command_class:execute(batch, program)
             print("inlint not implemented")
             assert(false)
          elseif v.ttype == "file" then
-            local template = self.path_handler.symbol_table:substitute(batch.symbol_table:substitute(load_template(v.path)))
-            local _, f,_   = path.split_filename(v.path)
-            local path     = path.join(self.path_handler:current(), f:gsub(".template", ""))
+            local template      = self.path_handler.symbol_table:substitute(batch.symbol_table:substitute(load_template(v.path)))
+            local template_path = ""
+            if not util.isempty(v.cpath) then
+               template_path = v.cpath
+            else
+               local _, f,_  = path.split_filename(v.path)
+               template_path = f:gsub(".template", "")
+            end
+            print(template_path)
+            if path.is_rel_path(template_path) then
+               template_path = path.join(self.path_handler:current(), template_path)
+            end
 
-            local template_file = assert(io.open(path, "w"))
+            local template_file = assert(io.open(template_path, "w"))
             template_file:write(template)
             template_file:close()
          else
@@ -456,9 +465,9 @@ end
 
 function program_class:template_setter()
    -- content can be content or path depending on ttype
-   return function(ttype, content)
+   return function(ttype, content, cpath)
       if ttype == "inline" then
-         table.insert(self.templates, { ttype = ttype, content = content, path = nil } )
+         table.insert(self.templates, { ttype = ttype, content = content, path = nil, cpath = cpath } )
       elseif ttype == "file" then
          local tpath = ""
          if path.is_abs_path(content) then
@@ -467,7 +476,7 @@ function program_class:template_setter()
             self.path_handler:print()
             tpath = path.join(self.path_handler:current(), content)
          end
-         table.insert(self.templates, { ttype = ttype, content = nil, path = tpath } )
+         table.insert(self.templates, { ttype = ttype, content = nil, path = tpath, cpath = cpath } )
       else
          logger:alert("Unknwown template type '" .. ttype .. "'.")
          assert(false)
