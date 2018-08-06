@@ -626,7 +626,7 @@ function batches_class:batches_setter()
 end
 
 function batches_class:program_setter()
-   return function(p, variables)
+   return function(p, variables, options)
       if type(p) ~= "string" then
          assert(false)
       end
