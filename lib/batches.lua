@@ -95,8 +95,12 @@ function symbol_table_class:add_symbol_setter()
    end
 end
 
-function symbol_table_class:escape(k)
-   local  pattern, _ = k:gsub("%%", "%%%%")
+function symbol_table_class:escape(str)
+   if type(str) ~= "string" then
+      str = tostring(str)
+   end
+
+   local  pattern, _ = str:gsub("%%", "%%%%")
    return pattern
 end
 
@@ -113,7 +117,10 @@ function symbol_table_class:substitute(str)
          for k, v in pairs(self.symbols) do
             if str:match(self:escape(k)) then
                local formatet_ssymb = self:escape(v.ssymb)
-               str     = string.gsub(str, self:escape(k), formatet_ssymb)
+               
+               -- Do actual substitution
+               str = string.gsub(str, self:escape(k), formatet_ssymb)
+               
                if v.ssymb:match(pattern) then
                   recurse = true
                end
