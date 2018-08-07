@@ -214,6 +214,74 @@ function deepcompare(t1,t2,ignore_mt)
    return true
 end
 
+--- Check all values in table, or nested tables.
+--
+-- If tab is a table of functions and fcn is nil, the functions in tab will be evaluated.
+--
+-- @param tab   Table or nested table of values to check.
+-- @param fcn   Optional function to call on values.
+-- @param ttype Type of check, "and" or "or".
+--
+-- @return      Returns 'true' or 'false'.
+local function check_all(tab, fcn, ttype)
+   local ret = nil
+
+   if ttype == nil then
+      ttype = "and"
+   end
+
+   local function not_boolean(v)
+      print("Value '" .. tostring(v) .. "' is not 'boolean' type. It is of type '" .. type(v) .. "'.")
+      assert(false)
+   end
+
+   local function apply(v, fcn)
+      if fcn == nil then
+         if type(v) == "function" then
+            local  fv = v()
+            if type(fv) ~= "boolean" then
+               not_boolean(fv)
+            end
+            return fv
+         elseif type(v) == "boolean" then
+            return v
+         else
+            not_boolean(v)
+         end
+      else
+         return fcn(v)
+      end
+   end
+
+   local function check(v, fcn)
+      if ret == nil then
+         ret = apply(v, fcn)
+      else
+         if ttype == "and" then
+            ret = ret and apply(v, fcn)
+         elseif ttype == "or" then
+            ret = ret or  apply(v, fcn)
+         else
+            assert(false)
+         end
+      end
+   end
+
+   local function check_all_impl(tab, fcn)
+      for k, v in pairs(tab) do
+         if type(v) == "table" then
+            check_all_impl(v, fcn)
+         else
+            check(v, fcn)
+         end 
+      end 
+   end 
+
+   check_all_impl(tab, fcn)
+
+   return ret
+end
+
 
 -- Load module functions
 M.print = table_print
@@ -225,6 +293,6 @@ M.ordered = ordered
 M.conditional = conditional
 M.deepcompare = deepcompare
 M.isempty = isempty
-M.map_all = map_all
+M.check_all = check_all
 
 return M

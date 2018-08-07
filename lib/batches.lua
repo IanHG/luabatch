@@ -584,6 +584,20 @@ local function range(from, to)
    return t
 end
 
+local function wait_files_setter(...)
+   local t_outer = pack( ... )
+   return function()
+      return util.check_all(t_outer, function(v) return filesystem.exists(v) end, "and")
+   end
+end
+
+local function wait_slurm_jobs_setter(...)
+   local t_outer = pack(...)
+   return function()
+      return check_all(t_outer, function(v) return slurm.job_completed(v) end, "and")
+   end
+end
+
 ---
 --
 --
@@ -620,6 +634,10 @@ function batches_class:__init()
       print    = print,
       pairs    = pairs,
       range    = range,
+
+      -- trigger functions
+      wait_files      = wait_files_setter,
+      wait_slurm_jobs = wait_slurm_jobs_setter,
 
       --
       symbol = self.symbol_table.ftable,
@@ -694,6 +712,7 @@ function batches_class:define_setter()
       return self.ftable
    end
 end
+
 
 ---
 
