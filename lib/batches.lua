@@ -7,6 +7,7 @@ local path    = assert(require "lib.path")
 local logging = assert(require "lib.logging")
 local logger  = logging.logger
 local execcmd = assert(require "lib.execcmd")
+local luautil = assert(require "lib.luautil")
 
 local function pack(...)
    return { ... }
@@ -395,7 +396,9 @@ function command_class:execute(batch, program)
    end
 
    if self.type == "exec" then
-      execcmd.execcmd_bashexec(batch.symbol_table:substitute(self.command), logger.logs)
+      local out    = { out = "" }
+      local status = execcmd.execcmd_bashexec(batch.symbol_table:substitute(self.command), out)
+      logger:message(out.out, "raw")
    elseif self.type == "files" then
       for k, v in pairs(program.templates) do
          if v.ttype == "inline" then
@@ -411,7 +414,7 @@ function command_class:execute(batch, program)
                local _, f,_  = path.split_filename(v.path)
                template_path = f:gsub(".template", "")
             end
-            print(template_path)
+            
             if path.is_rel_path(template_path) then
                template_path = path.join(self.path_handler:current(), template_path)
             end
@@ -448,6 +451,7 @@ function program_class:__init()
    self.variables = nil
 
    self.commands  = {}
+   self.options   = {}
 
    self.path_handler = nil
    self.symbol_table = symbol_table_class:create()
@@ -544,6 +548,13 @@ function program_class:define_setter()
 end
 
 function program_class:execute(batches, batch)
+   if self.options.trigger then
+      while not self.options.trigger() do
+         print("sleeping")
+         luautil.sleep(self.options.wait / 1000)
+      end
+   end
+   
    for k, v in pairs(self.commands) do
       v:execute(batch, self)
    end
@@ -652,6 +663,10 @@ function batches_class:program_setter()
       program.path_handler = self.path_handler
       program.ftable.pop   = self.ftable
       
+      if options then
+         program.options = options
+      end
+      
       if type(variables) == "string" then
          program.variables = { variables }
       elseif type(variables) == "table" then
@@ -678,6 +693,10 @@ function batches_class:map_all(fcn, tab, tabs)
            fcn(...)
        else
            local t = tab[tabs[idx]]
+           if not t then
+              logger:alert("Variable : '" .. tabs[idx] .. "' not found.")
+              assert(false)
+           end
            for k, v in pairs(t.variables) do
               map_all_impl(fcn, tab, tabs, idx - 1, { key = t.name, value = v, format_fcn = t.format_fcn }, ...) 
            end

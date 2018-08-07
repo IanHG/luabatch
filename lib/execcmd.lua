@@ -170,10 +170,18 @@ local function read_from_fds(fd, log, chunksize)
                if log then
                   if type(log) == "table" then
                      for key, value in pairs(log) do
-                        value:write(line)
+                        if type(log[key]) == "string" then
+                           log[key] = log[key] .. line
+                        else
+                           log[key]:write(line)
+                        end
                      end
                   else
-                     log:write(line)
+                     if type(log) == "string" then
+                        log = log .. line
+                     else
+                        log:write(line)
+                     end
                   end
                end
             end
