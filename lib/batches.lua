@@ -69,7 +69,8 @@ function symbol_table_class:add_symbol(symb, ssymb, overwrite, format_fcn)
       assert(false)
    end
    if not (type(ssymb) == "string") then
-      assert(false)
+      --assert(false)
+      ssymb = tostring(ssymb)
    end
 
    local symbol = self.sbeg .. symb .. self.send
@@ -575,6 +576,14 @@ function program_class:print()
    end
 end
 
+local function range(from, to)
+   local t = {}
+   for i = from, to do
+      table.insert(t, i)
+   end
+   return t
+end
+
 ---
 --
 --
@@ -610,6 +619,7 @@ function batches_class:__init()
       -- util
       print    = print,
       pairs    = pairs,
+      range    = range,
 
       --
       symbol = self.symbol_table.ftable,
