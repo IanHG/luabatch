@@ -112,36 +112,41 @@ function symbol_table_class:substitute(str)
    -- Declare implementation function
    local function substitute_impl(str)
       if str:match(pattern) then
-         local format_fcns  = { }
-         local recurse      = false
+         --local format_fcns  = { }
+         --local recurse      = false
          
          -- loop over symbols
          for k, v in pairs(self.symbols) do
             if str:match(self:escape(k)) then
-               local formatet_ssymb = self:escape(v.ssymb)
-               
-               -- Do actual substitution
-               str = string.gsub(str, self:escape(k), formatet_ssymb)
+               --local formatet_ssymb = self:escape(v.ssymb)
+               local formatet_ssymb = v.ssymb
                
                if v.ssymb:match(pattern) then
-                  recurse = true
+                  formatet_ssymb = substitute_impl(formatet_ssymb)
+               end
+
+               if v.format_fcn then
+                  formatet_ssymb = v.format_fcn(formatet_ssymb)
                end
                
-               if v.format_fcn then
-                  table.insert(format_fcns, v.format_fcn)
-               end
+               -- Do actual substitution
+               --print("FORMATET")
+               --print(formatet_ssymb)
+               --print("STRING")
+               --print(str)
+               str = string.gsub(str, self:escape(k), self:escape(formatet_ssymb))
             end
          end
          
-         -- if we substituted in any new symbols, we need to do recursion!
-         if recurse then
-            str = substitute_impl(str)
-         end
-         
-         -- after all substitutions, we call any formating functions 
-         for k, v in pairs(format_fcns) do
-            str = v(str)
-         end
+         ---- if we substituted in any new symbols, we need to do recursion!
+         --if recurse then
+         --   str = substitute_impl(str)
+         --end
+         --
+         ---- after all substitutions, we call any formating functions 
+         --for k, v in pairs(format_fcns) do
+         --   str = v(str)
+         --end
       end
       
 
@@ -381,7 +386,9 @@ end
 
 
 function command_class:execute(batch, program)
-   logger:message(" Executing command : [" .. self.type .. "] : '" .. batch.symbol_table:substitute(self.command) .. "'.")
+   local command = batch.symbol_table:substitute(self.command)
+
+   logger:message(" Executing command : [" .. self.type .. "] : '" .. command .. "'.")
 
    -- Load template
    local function load_template(path)
@@ -398,7 +405,7 @@ function command_class:execute(batch, program)
 
    if self.type == "exec" then
       local out    = { out = "" }
-      local status = execcmd.execcmd_bashexec(batch.symbol_table:substitute(self.command), out)
+      local status = execcmd.execcmd_bashexec(command, out)
       logger:message(out.out, "raw")
    elseif self.type == "files" then
       for k, v in pairs(program.templates) do
@@ -591,12 +598,12 @@ local function wait_files_setter(...)
    end
 end
 
-local function wait_slurm_jobs_setter(...)
-   local t_outer = pack(...)
-   return function()
-      return check_all(t_outer, function(v) return slurm.job_completed(v) end, "and")
-   end
-end
+--local function wait_slurm_jobs_setter(...)
+--   local t_outer = pack(...)
+--   return function()
+--      return check_all(t_outer, function(v) return slurm.job_completed(v) end, "and")
+--   end
+--end
 
 ---
 --
@@ -637,7 +644,7 @@ function batches_class:__init()
 
       -- trigger functions
       wait_files      = wait_files_setter,
-      wait_slurm_jobs = wait_slurm_jobs_setter,
+      --wait_slurm_jobs = wait_slurm_jobs_setter,
 
       --
       symbol = self.symbol_table.ftable,
