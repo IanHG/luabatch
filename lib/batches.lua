@@ -66,6 +66,8 @@ end
 
 function symbol_table_class:add_symbol(symb, ssymb, overwrite, format_fcn)
    if not (type(symb) == "string") or util.isempty(symb) then
+      print("What?")
+      print(symb)
       assert(false)
    end
    if not (type(ssymb) == "string") then
@@ -574,8 +576,10 @@ function program_class:print()
       logger:message("   Template : " .. v.ttype .. " " .. v.path)
    end
    if self.variables then
-      for k, v in pairs(self.variables) do
-         logger:message("   Variable : " .. v)
+      if type(self.variables) == "table" then
+         for k, v in pairs(self.variables) do
+            logger:message("   Variable : " .. v)
+         end
       end
    end
    for k, v in pairs(self.commands) do
@@ -703,7 +707,11 @@ function batches_class:program_setter()
       end
       
       if type(variables) == "string" then
-         program.variables = { variables }
+         if variables == "once" then
+            program.variables = "once"
+         else
+            program.variables = { variables }
+         end
       elseif type(variables) == "table" then
          program.variables = variables
       end
@@ -771,15 +779,32 @@ function batches_class:execute()
 
       if vp.variables == nil then
          self:map_all(run_batch, self.variables)
-      else
+      elseif type(vp.variables) == "table" then
+         print("HERE?")
          self:map_all(run_batch, self.variables, vp.variables)
+      elseif type(vp.variables) == "string" then
+         print("SHOULD BE HERE")
+         if vp.variables == "once" then
+            self:map_all(run_batch, { dummy = { name = "dummy", variables = { "dummy" } } })
+         else
+            logger:alert("Unknown string '" .. vp.variables .. "' for program varibales parameter.")
+            assert(false)
+         end
+      else
+         logger:alert("Program parameter 'variables' is unknown type.")
+         assert(false)
       end
    end
 end
 
 function batches_class:load(batches_path, symbols)
    assert(type(batches_path) == "string")
-   self.path = batches_path
+   if path.is_abs_path(batches_path) then
+      self.path = batches_path
+   else
+      self.path = path.join(filesystem.cwd(), batches_path)
+   end
+
    self.name = "config"
    self.path_handler:pop_all()
    self.path_handler:push(filesystem.cwd())
@@ -798,6 +823,7 @@ function batches_class:load(batches_path, symbols)
    end
    
    self.symbol_table:add_symbol("uid", generate_uid("xxxx"))
+   self.symbol_table:add_symbol("config_path", self.path)
    if symbols ~= nil then
       for k, v in pairs(symbols) do
          local s = util.split(v, "=")
