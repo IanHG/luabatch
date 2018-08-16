@@ -282,7 +282,6 @@ local function check_all(tab, fcn, ttype)
    return ret
 end
 
-
 -- Load module functions
 M.print = table_print
 M.merge = merge

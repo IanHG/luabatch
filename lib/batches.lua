@@ -244,6 +244,76 @@ function path_handler_class:print()
    end
 end
 
+-- Class for creating files from templates
+local file_creator_class = class.create_class()
+
+function file_creator_class:__init()
+   self.path_handler = nil
+   self.template     = nil
+end
+
+function file_creator_class:create_file(ttemplate, batch)
+   self.template = ttemplate
+   
+   if self.path_handler == nil then
+      logger:alert("Path handler not set in file_creator_class.")
+      assert(false)
+   end
+   
+   -- helper
+   local function load_template(path)
+      local f = io.open(path)
+      
+      if f == nil then
+         logger:alert("Did not find template file '" .. path .. "'.")
+         assert(false)
+      end
+      
+      local  template = f:read("*all")
+      return template
+   end
+   
+   -- helper
+   local function generate_template_path()
+      local template_path = ""
+      if not util.isempty(self.template.cpath) then
+         template_path = self.template.cpath
+      else
+         local _, f,_  = path.split_filename(self.template.path)
+         template_path = f:gsub(".template", "")
+      end
+      
+      if path.is_rel_path(template_path) then
+         template_path = path.join(self.path_handler:current(), template_path)
+      end
+      return template_path
+   end
+   
+   -- helper
+   local function write_file(template_path, template)
+      local template_file = assert(io.open(template_path, "w"))
+      template_file:write(template)
+      template_file:close()
+   end
+   
+   -- Create the file
+   local template = ""
+   if self.template.ttype == "inline" then
+      if self.template.content then
+         template = self.path_handler.symbol_table:substitute(batch.symbol_table:substitute(self.template.content))
+      end
+   elseif self.template.ttype == "file" then
+      if self.template.path then
+         template = self.path_handler.symbol_table:substitute(batch.symbol_table:substitute(load_template(self.template.path)))
+      end
+   else
+      assert(false)
+   end
+   
+   local template_path = generate_template_path()
+   write_file(template_path, template)
+end
+
 --- Base class for the different batches classes.
 -- Implemenents some general function for creating the
 -- setter functions to be passed to the extern package.
@@ -377,7 +447,8 @@ local command_class = class.create_class()
 function command_class:__init()
    -- command types:
    --    "exec"   : execute in shell
-   --    "files"  : create template files
+   --    "files"  : create all template files
+   --    "file"   : create a single template file
    --    "mkdir"  : create directory
    --    "chdir"  : change working directory
    --    "popdir" : pop current directory
@@ -393,17 +464,6 @@ function command_class:execute(batch, program)
    logger:message(" Executing command : [" .. self.type .. "] : '" .. command .. "'.")
 
    -- Load template
-   local function load_template(path)
-      local f = io.open(path)
-      
-      if f == nil then
-         logger:alert("Did not find template file '" .. path .. "'.")
-         assert(false)
-      end
-      
-      local template = f:read("*all")
-      return template
-   end
 
    if self.type == "exec" then
       local out    = { out = "" }
@@ -411,31 +471,18 @@ function command_class:execute(batch, program)
       logger:message(out.out, "raw")
    elseif self.type == "files" then
       for k, v in pairs(program.templates) do
-         if v.ttype == "inline" then
-            -- not implemented
-            print("inlint not implemented")
-            assert(false)
-         elseif v.ttype == "file" then
-            local template      = self.path_handler.symbol_table:substitute(batch.symbol_table:substitute(load_template(v.path)))
-            local template_path = ""
-            if not util.isempty(v.cpath) then
-               template_path = v.cpath
-            else
-               local _, f,_  = path.split_filename(v.path)
-               template_path = f:gsub(".template", "")
-            end
-            
-            if path.is_rel_path(template_path) then
-               template_path = path.join(self.path_handler:current(), template_path)
-            end
-
-            local template_file = assert(io.open(template_path, "w"))
-            template_file:write(template)
-            template_file:close()
-         else
-            assert(false)
-         end
+         local file_creator = file_creator_class:create()
+         file_creator.path_handler = program.path_handler
+         file_creator:create_file(v, batch)
       end
+   elseif self.type == "file" then
+      local file_creator = file_creator_class:create()
+      file_creator.path_handler = self.path_handler
+      local template = program:get_template(self.command)
+      if self.path then
+         template.cpath = self.path
+      end
+      file_creator:create_file(template, batch)
    elseif self.type == "mkdir" then
       filesystem.mkdir(batch.symbol_table:substitute(self.command))
    elseif self.type == "chdir" then
@@ -470,6 +517,7 @@ function program_class:__init()
       template       = self:template_setter(),
       command        = self:command_setter(),
       files          = self:files_setter(),
+      file           = self:file_setter(),
       with_directory = self:with_directory_setter(),
       pop_directory  = self:pop_directory_setter(),
       define         = self:define_setter(),
@@ -482,6 +530,15 @@ function program_class:create_command()
    local  command = command_class:create()
    command.path_handler = self.path_handler
    return command
+end
+
+function program_class:get_template(name)
+   for k, v in pairs(self.templates) do
+      if v.cpath == name then
+         return v
+      end
+   end
+   return nil
 end
 
 function program_class:template_setter()
@@ -520,6 +577,17 @@ function program_class:files_setter()
    return function()
       local command = self:create_command()
       command.type  = "files"
+      table.insert(self.commands, command)
+      return self.ftable
+   end
+end
+
+function program_class:file_setter()
+   return function(name, path)
+      local command = self:create_command()
+      command.type = "file"
+      command.command = name
+      command.path    = path
       table.insert(self.commands, command)
       return self.ftable
    end
