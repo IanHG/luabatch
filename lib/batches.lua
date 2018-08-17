@@ -831,7 +831,6 @@ function batches_class:execute()
          print("HERE?")
          self:map_all(run_batch, self.variables, vp.variables)
       elseif type(vp.variables) == "string" then
-         print("SHOULD BE HERE")
          if vp.variables == "once" then
             self:map_all(run_batch, { dummy = { name = "dummy", variables = { "dummy" } } })
          else
