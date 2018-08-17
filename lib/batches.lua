@@ -66,12 +66,10 @@ end
 
 function symbol_table_class:add_symbol(symb, ssymb, overwrite, format_fcn)
    if not (type(symb) == "string") or util.isempty(symb) then
-      print("What?")
-      print(symb)
+      logger:alert("Cannot add : Symbol is empty.")
       assert(false)
    end
    if not (type(ssymb) == "string") then
-      --assert(false)
       ssymb = tostring(ssymb)
    end
 
@@ -114,13 +112,9 @@ function symbol_table_class:substitute(str)
    -- Declare implementation function
    local function substitute_impl(str)
       if str:match(pattern) then
-         --local format_fcns  = { }
-         --local recurse      = false
-         
          -- loop over symbols
          for k, v in pairs(self.symbols) do
             if str:match(self:escape(k)) then
-               --local formatet_ssymb = self:escape(v.ssymb)
                local formatet_ssymb = v.ssymb
                
                if v.ssymb:match(pattern) then
@@ -132,23 +126,9 @@ function symbol_table_class:substitute(str)
                end
                
                -- Do actual substitution
-               --print("FORMATET")
-               --print(formatet_ssymb)
-               --print("STRING")
-               --print(str)
                str = string.gsub(str, self:escape(k), self:escape(formatet_ssymb))
             end
          end
-         
-         ---- if we substituted in any new symbols, we need to do recursion!
-         --if recurse then
-         --   str = substitute_impl(str)
-         --end
-         --
-         ---- after all substitutions, we call any formating functions 
-         --for k, v in pairs(format_fcns) do
-         --   str = v(str)
-         --end
       end
       
 
