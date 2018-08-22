@@ -25,8 +25,12 @@ local function command(args)
    local bt = batches.load_batches(args.name, args.symbol)
    
    bt:print()
-
-   bt:execute()
+   
+   if args.dry then
+      bt:execute_dry()
+   else
+      bt:execute()
+   end
 end
 
 --- Main driver.
@@ -34,6 +38,7 @@ function main()
    -- Arg parser
    local parser = argparse.create(description)
    parser:option("-s --symbol"  , "Add symbol to be substituted."):count("*")
+   parser:flag  ("--dry"        , "Only print number of batches, but do not do anything.")
    parser:argument("name")
    
    -- Parse arguments
