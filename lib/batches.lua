@@ -266,7 +266,7 @@ function file_creator_class:create_file(ttemplate, batch)
       if path.is_rel_path(template_path) then
          template_path = path.join(self.path_handler:current(), template_path)
       end
-      return template_path
+      return batch.symbol_table:substitute(template_path)
    end
    
    -- helper
