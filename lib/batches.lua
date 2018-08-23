@@ -388,9 +388,16 @@ function variable_class:append(variables)
 end
 
 function variable_class:print()
-   logger:message(" Variable : " .. self.name)
-   for k, v in pairs(self.variables) do
-      logger:message("   " .. v)
+   if type(self.name) == "table" then
+      --logger:message(" Variable : " .. self.name)
+      --for k, v in pairs(self.variables) do
+      --   logger:message("   " .. v)
+      --end
+   else
+      logger:message(" Variable : " .. self.name)
+      for k, v in pairs(self.variables) do
+         logger:message("   " .. v)
+      end
    end
 end
 
@@ -812,7 +819,13 @@ function batches_class:execute()
          local p     = pack( ... )
          local batch = batch_class:create()
          for k, v in pairs(p) do
-            batch.symbol_table:add_symbol(v.key, v.value, true, v.format_fcn)
+            if type(v.key) == "table" then
+               for kk, vk in pairs(v.key) do
+                  batch.symbol_table:add_symbol(v.key[kk], v.value[kk], true, v.format_fcn)
+               end
+            else
+               batch.symbol_table:add_symbol(v.key, v.value, true, v.format_fcn)
+            end
          end
          batch.symbol_table:merge(vp.symbol_table)
          batch.symbol_table:merge(self.symbol_table)
