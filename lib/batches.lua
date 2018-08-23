@@ -266,7 +266,7 @@ function file_creator_class:create_file(ttemplate, batch)
       if path.is_rel_path(template_path) then
          template_path = path.join(self.path_handler:current(), template_path)
       end
-      return template_path
+      return batch.symbol_table:substitute(template_path)
    end
    
    -- helper
@@ -812,6 +812,51 @@ function batches_class:map_all(fcn, tab, tabs)
    map_all_impl(fcn, tab, tabs, #tabs)
 end
 
+function batches_class:count_all(tab, tabs)
+   if tabs == nil then
+      tabs = {}
+      for k, v in pairs(tab) do
+         table.insert(tabs, k)
+      end
+   end
+
+   local count = 1
+   for ktab, vtab in pairs(tab) do
+      for ktabs, vtabs in pairs(tabs) do
+         if ktab == vtabs then
+            count = count * #(vtab.variables)
+         end
+      end
+   end
+
+   return count
+end
+
+function batches_class:execute_dry()
+   for kp, vp in pairs(self.programs) do
+      local count = nil
+
+      if vp.variables == nil then
+         count = self:count_all(self.variables)
+      elseif type(vp.variables) == "table" then
+         count = self:count_all(self.variables, vp.variables)
+      elseif type(vp.variables) == "string" then
+         if vp.variables == "once" then
+            count = self:count_all({ dummy = { name = "dummy", variables = { "dummy" } } })
+         else
+            logger:alert("Unknown string '" .. vp.variables .. "' for program varibales parameter.")
+            assert(false)
+         end
+      else
+         logger:alert("Program parameter 'variables' is unknown type.")
+         assert(false)
+      end
+
+      logger:message("Program '" .. vp.name .. "' will be run " .. tostring(count) .. " times.")
+   end
+end
+
+---
 function batches_class:execute()
    logger:message("Executing batches.")
    for kp, vp in pairs(self.programs) do
