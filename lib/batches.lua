@@ -389,10 +389,33 @@ end
 
 function variable_class:print()
    if type(self.name) == "table" then
-      --logger:message(" Variable : " .. self.name)
-      --for k, v in pairs(self.variables) do
-      --   logger:message("   " .. v)
-      --end
+      local first   = true
+      local message = "{"
+      for k, v in pairs(self.name) do
+         if first then
+            message = message .. v 
+         else 
+            message = message .. ", " .. v
+         end
+         first = false
+      end
+      message = message .. "}"
+
+      logger:message(" Variable : " .. message)
+      for k, v in pairs(self.variables) do
+         local vfirst = true
+         local vmessage = "{"
+         for kk, vv in pairs(v) do
+            if vfirst then
+               vmessage = vmessage .. vv
+            else
+               vmessage = vmessage .. ", " .. vv
+            end
+            vfirst = false
+         end
+         vmessage = vmessage .. "}"
+         logger:message("   " .. vmessage)
+      end
    else
       logger:message(" Variable : " .. self.name)
       for k, v in pairs(self.variables) do
