@@ -35,11 +35,12 @@ end
 
 --- Main driver.
 function main()
+   print("STARTING UP SHIT")
    -- Arg parser
    local parser = argparse.create(description)
    parser:option("-s --symbol"  , "Add symbol to be substituted."):count("*")
    parser:flag  ("--dry"        , "Only print number of batches, but do not do anything.")
-   parser:argument("name")
+   parser:argument("name"):args("+")
    
    -- Parse arguments
    args = parser:parse()

@@ -28,8 +28,15 @@ local function sleep(sec)
    socket.select(nil, nil, sec)
 end
 
+---
+-- Get lua version
+local function version()
+   return _VERSION
+end
+
 -- Create module
 M.require = loadrequire
 M.sleep   = sleep
+M.version = version
 
 return M

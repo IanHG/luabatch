@@ -20,10 +20,24 @@ local function pack(...)
 end
 
 local function dofile_into_environment(filename, env)
-    setmetatable ( env, { __index = _G } )
-    local status, result = assert(pcall(setfenv(assert(loadfile(filename)), env)))
-    setmetatable(env, nil)
-    return result
+   function readall(file)
+      local f = assert(io.open(file, "rb"))
+      local content = f:read("*all")
+      f:close()
+      return content
+   end
+
+   setmetatable ( env, { __index = _G } )
+   local status = nil
+   local result = nil
+   if luautil.version() == "Lua 5.1" then
+      status, result = assert(pcall(setfenv(assert(loadfile(filename)), env)))
+   else
+      local content  = readall(filename)
+      status, result = assert(pcall(load(content, nil, nil, env)))
+   end
+   setmetatable(env, nil)
+   return result
 end
 
 local function get_name(batches_path)
@@ -926,32 +940,50 @@ function batches_class:execute()
 end
 
 function batches_class:load(batches_path, symbols)
-   assert(type(batches_path) == "string")
-   if path.is_abs_path(batches_path) then
-      self.path = batches_path
-   else
-      self.path = path.join(filesystem.cwd(), batches_path)
-   end
-
+   --assert(type(batches_path) == "string")
    self.name = "config"
    self.path_handler:pop_all()
    self.path_handler:push(filesystem.cwd())
    
-   local env  = self.ftable
-   local file = dofile_into_environment(self.path, env)
-   
-   if env[self.name] then
-      env[self.name]()
-   else
-      logger:alert("Could not load.")
+   -- Load config files
+   self.paths = {}
+   print("HERE")
+   for k, v in pairs(batches_path) do
+      local batch_path = ""
+      print(k)
+      print(v)
+      if path.is_abs_path(v) then
+         batch_path = v
+      else
+         batch_path = path.join(filesystem.cwd(), v)
+      end
+
+      table.insert(self.paths, batch_path)
+      
+      local env  = self.ftable
+      local file = dofile_into_environment(batch_path, env)
+      
+      if env[self.name] then
+         env[self.name]()
+      else
+         logger:alert("Could not load.")
+      end
    end
 
+   -- Setup directory
    if util.isempty(self.directory) then
       self.directory = filesystem.cwd()
    end
    
+   -- Fix symbol table
+   for k, v in pairs(self.paths) do
+      self.symbol_table:add_symbol("config_path_" .. tostring(k), v)
+   end
+   if #batches_path == 1 then -- backward compatibility
+      self.symbol_table:add_symbol("config_path", self.paths[1])
+   end
+   
    self.symbol_table:add_symbol("uid", generate_uid("xxxx"))
-   self.symbol_table:add_symbol("config_path", self.path)
    if symbols ~= nil then
       for k, v in pairs(symbols) do
          local s = util.split(v, "=")
@@ -980,6 +1012,7 @@ function batches_class:print()
 end
 
 local function load_batches(path, symbols)
+   print("WTF")
    local bt = batches_class:create()
    bt:load(path, symbols)
    return bt
