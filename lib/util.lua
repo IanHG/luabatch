@@ -292,6 +292,7 @@ M.ordered = ordered
 M.conditional = conditional
 M.deepcompare = deepcompare
 M.isempty = isempty
+M.is_empty = isempty
 M.check_all = check_all
 
 return M

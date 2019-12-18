@@ -17,19 +17,28 @@ local description = version.get_description("luabatch")
 
 
 local function command(args)
+   local symbols = {}
    for k, v in pairs(args.symbol) do
-      print(k)
-      print(v)
+      for k2, v2 in pairs(v) do
+         table.insert(symbols, v2)
+      end
+   end
+   
+   local program = {}
+   for k, v in pairs(args.program) do
+      for k2, v2 in pairs(v) do
+         table.insert(program, v2)
+      end
    end
 
-   local bt = batches.load_batches(args.name, args.symbol)
+   local bt = batches.load_batches(args.name, symbols)
    
    bt:print()
    
    if args.dry then
-      bt:execute_dry()
+      bt:execute_dry(program)
    else
-      bt:execute()
+      bt:execute(program)
    end
 end
 
@@ -38,8 +47,9 @@ function main()
    print("STARTING UP SHIT")
    -- Arg parser
    local parser = argparse.create(description)
-   parser:option("-s --symbol"  , "Add symbol to be substituted."):count("*")
+   parser:option("-s --symbol"  , "Add symbol to be substituted."):args("?"):count("*")
    parser:flag  ("--dry"        , "Only print number of batches, but do not do anything.")
+   parser:flag  ("-p --program" , "Only run specified programs."):args("?"):count("*")
    parser:argument("name"):args("+")
    
    -- Parse arguments

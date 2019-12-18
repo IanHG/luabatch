@@ -663,7 +663,7 @@ function program_class:execute(batches, batch)
 end
 
 function program_class:print()
-   logger:message(" Program :")
+   logger:message(" Program : [" .. self.name .. "]")
    for k, v in pairs(self.templates) do
       logger:message("   Template : " .. v.ttype .. " " .. v.path)
    end
@@ -674,6 +674,8 @@ function program_class:print()
          end
       end
    end
+   self.symbol_table:print()
+   logger:message("   Commands : ")
    for k, v in pairs(self.commands) do
       v:print()
    end
@@ -869,8 +871,22 @@ function batches_class:count_all(tab, tabs)
    return count
 end
 
-function batches_class:execute_dry()
-   for kp, vp in pairs(self.programs) do
+function batches_class:execute_dry(program)
+   local function check_program_match(vp)
+      if util.is_empty(program) then
+         return true
+      end
+      
+      for o_key, o_value in pairs(program) do
+         if o_value == vp.name then
+            return true
+         end
+      end
+
+      return false
+   end
+
+   local function run_program_dry(vp)
       local count = nil
 
       if vp.variables == nil then
@@ -891,50 +907,72 @@ function batches_class:execute_dry()
 
       logger:message("Program '" .. vp.name .. "' will be run " .. tostring(count) .. " times.")
    end
+
+   for kp, vp in pairs(self.programs) do
+      if check_program_match(program, vp) then
+         run_program_dry(vp)
+      end
+   end
 end
 
 ---
-function batches_class:execute()
+function batches_class:execute(program)
    logger:message("Executing batches.")
-   for kp, vp in pairs(self.programs) do
-      local function run_batch(...)
-         local p     = pack( ... )
-         local batch = batch_class:create()
-         for k, v in pairs(p) do
-            if type(v.key) == "table" then
-               for kk, vk in pairs(v.key) do
-                  batch.symbol_table:add_symbol(v.key[kk], v.value[kk], true, v.format_fcn)
-               end
-            else
-               batch.symbol_table:add_symbol(v.key, v.value, true, v.format_fcn)
-            end
+   local function check_program_match(vp)
+      if util.is_empty(program) then
+         return true
+      end
+      
+      for o_key, o_value in pairs(program) do
+         if o_value == vp.name then
+            return true
          end
-         batch.symbol_table:merge(vp.symbol_table)
-         batch.symbol_table:merge(self.symbol_table)
-         
-         logger:message("Running batch ")
-         batch:print()
-         
-         self.path_handler:pop_all()
-         self.path_handler:push(self.directory)
-         vp:execute(self, batch)
       end
 
-      if vp.variables == nil then
-         self:map_all(run_batch, self.variables)
-      elseif type(vp.variables) == "table" then
-         print("HERE?")
-         self:map_all(run_batch, self.variables, vp.variables)
-      elseif type(vp.variables) == "string" then
-         if vp.variables == "once" then
-            self:map_all(run_batch, { dummy = { name = "dummy", variables = { "dummy" } } })
+      return false
+   end
+
+   for kp, vp in pairs(self.programs) do
+      if check_program_match(vp) then
+         local function run_batch(...)
+            local p     = pack( ... )
+            local batch = batch_class:create()
+            for k, v in pairs(p) do
+               if type(v.key) == "table" then
+                  for kk, vk in pairs(v.key) do
+                     batch.symbol_table:add_symbol(v.key[kk], v.value[kk], true, v.format_fcn)
+                  end
+               else
+                  batch.symbol_table:add_symbol(v.key, v.value, true, v.format_fcn)
+               end
+            end
+            batch.symbol_table:merge(vp.symbol_table)
+            batch.symbol_table:merge(self.symbol_table)
+            
+            logger:message("Running batch ")
+            batch:print()
+            
+            self.path_handler:pop_all()
+            self.path_handler:push(self.directory)
+            vp:execute(self, batch)
+         end
+
+         if vp.variables == nil then
+            self:map_all(run_batch, self.variables)
+         elseif type(vp.variables) == "table" then
+            print("HERE?")
+            self:map_all(run_batch, self.variables, vp.variables)
+         elseif type(vp.variables) == "string" then
+            if vp.variables == "once" then
+               self:map_all(run_batch, { dummy = { name = "dummy", variables = { "dummy" } } })
+            else
+               logger:alert("Unknown string '" .. vp.variables .. "' for program varibales parameter.")
+               assert(false)
+            end
          else
-            logger:alert("Unknown string '" .. vp.variables .. "' for program varibales parameter.")
+            logger:alert("Program parameter 'variables' is unknown type.")
             assert(false)
          end
-      else
-         logger:alert("Program parameter 'variables' is unknown type.")
-         assert(false)
       end
    end
 end
@@ -947,11 +985,9 @@ function batches_class:load(batches_path, symbols)
    
    -- Load config files
    self.paths = {}
-   print("HERE")
    for k, v in pairs(batches_path) do
       local batch_path = ""
-      print(k)
-      print(v)
+      
       if path.is_abs_path(v) then
          batch_path = v
       else
@@ -1012,7 +1048,6 @@ function batches_class:print()
 end
 
 local function load_batches(path, symbols)
-   print("WTF")
    local bt = batches_class:create()
    bt:load(path, symbols)
    return bt
