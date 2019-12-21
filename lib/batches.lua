@@ -786,7 +786,7 @@ function batches_class:batches_setter()
 end
 
 function batches_class:program_setter()
-   return function(p, variables, options)
+   return function(p, options, variables)
       if type(p) ~= "string" then
          assert(false)
       end
@@ -797,17 +797,27 @@ function batches_class:program_setter()
       program.ftable.pop   = self.ftable
       
       if options then
-         program.options = options
+         if type(options) == "table" then
+            program.options = options
+         elseif type(options) == "string" then
+            program.options = { options }
+         else
+            error("Unknown options type '" .. type(options) .. "'.")
+         end
       end
       
-      if type(variables) == "string" then
-         if variables == "once" then
-            program.variables = "once"
+      if variables then
+         if type(variables) == "string" then
+            if variables == "once" then
+               program.variables = "once"
+            else
+               program.variables = { variables }
+            end
+         elseif type(variables) == "table" then
+            program.variables = variables
          else
-            program.variables = { variables }
+            error("Unknown options type '" .. type(options) .. "'.")
          end
-      elseif type(variables) == "table" then
-         program.variables = variables
       end
 
       table.insert(self.programs, program)
@@ -871,21 +881,30 @@ function batches_class:count_all(tab, tabs)
    return count
 end
 
-function batches_class:execute_dry(program)
-   local function check_program_match(vp)
-      if util.is_empty(program) then
+--- Helper function for checking whether program should be run
+--
+local function check_program_match(vp, program)
+   if util.is_empty(program) then
+      if vp.options.callable then
+         return false
+      else
          return true
       end
-      
-      for o_key, o_value in pairs(program) do
-         if o_value == vp.name then
-            return true
-         end
+   end
+   
+   for o_key, o_value in pairs(program) do
+      if o_value == vp.name then
+         return true
       end
-
-      return false
    end
 
+   return false
+end
+
+--- Execute dry run
+--
+--
+function batches_class:execute_dry(program)
    local function run_program_dry(vp)
       local count = nil
 
@@ -909,7 +928,7 @@ function batches_class:execute_dry(program)
    end
 
    for kp, vp in pairs(self.programs) do
-      if check_program_match(program, vp) then
+      if check_program_match(vp, program) then
          run_program_dry(vp)
       end
    end
@@ -918,22 +937,9 @@ end
 ---
 function batches_class:execute(program)
    logger:message("Executing batches.")
-   local function check_program_match(vp)
-      if util.is_empty(program) then
-         return true
-      end
-      
-      for o_key, o_value in pairs(program) do
-         if o_value == vp.name then
-            return true
-         end
-      end
-
-      return false
-   end
 
    for kp, vp in pairs(self.programs) do
-      if check_program_match(vp) then
+      if check_program_match(vp, program) then
          local function run_batch(...)
             local p     = pack( ... )
             local batch = batch_class:create()
@@ -960,7 +966,6 @@ function batches_class:execute(program)
          if vp.variables == nil then
             self:map_all(run_batch, self.variables)
          elseif type(vp.variables) == "table" then
-            print("HERE?")
             self:map_all(run_batch, self.variables, vp.variables)
          elseif type(vp.variables) == "string" then
             if vp.variables == "once" then
