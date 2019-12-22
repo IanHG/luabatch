@@ -739,6 +739,8 @@ function batches_class:__init()
       print    = print,
       pairs    = pairs,
       range    = range,
+      tonumber = tonumber,
+      tostring = tostring,
 
       -- trigger functions
       wait_files      = wait_files_setter,
