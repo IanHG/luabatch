@@ -492,6 +492,8 @@ function command_class:execute(batch, program)
    if self.type == "exec" then
       local out    = { out = "" }
       local status = execcmd.execcmd_bashexec(command, out)
+      local cmd_input = out.out:gsub("^%+(.-)\n", "")
+      batch.symbol_table:add_symbol("cmd_input", cmd_input, true)
       logger:message(out.out, "raw")
    elseif self.type == "files" then
       for k, v in pairs(program.templates) do
