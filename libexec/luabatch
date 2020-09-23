@@ -44,7 +44,6 @@ end
 
 --- Main driver.
 function main()
-   print("STARTING UP SHIT")
    -- Arg parser
    local parser = argparse.create(description)
    parser:option("-s --symbol"  , "Add symbol to be substituted."):args("?"):count("*")
